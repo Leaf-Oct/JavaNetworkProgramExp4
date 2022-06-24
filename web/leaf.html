@@ -1,0 +1,329 @@
+<!doctype html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<!-- jquery -->
+	<script src="https://cdn.staticfile.org/jquery/1.10.2/jquery.min.js"></script>
+	<!-- bootstarp -->
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css">
+
+	<style>
+		html,
+		body {
+			background-color: #000000;
+		}
+
+		.sakura_container {
+			width: 100%;
+			height: 100%;
+			margin: 0;
+			padding: 0;
+			/* background-color: #000000; */
+		}
+	</style>
+
+	<title>十月叶~Leaf Oct</title>
+	<link rel="shortcut icon" href="./滑稽icon.png" />
+</head>
+<!--背景-->
+<div id="jsi-cherry-container" class="sakura_container" style="position: fixed;"></div>
+<script>
+	var RENDERER = {
+		//最一开始几篇花瓣，花瓣密度
+		INIT_CHERRY_BLOSSOM_COUNT: 3,
+		MAX_ADDING_INTERVAL: 60,
+
+		init: function () {
+			//初始化参数
+			this.setParameters();
+			//暂时不知道干啥的
+			this.reconstructMethods();
+			//初始化花瓣
+			this.createCherries();
+
+			this.render();
+		},
+		setParameters: function () {
+			this.$container = $('#jsi-cherry-container');
+			this.width = this.$container.width();
+			this.height = this.$container.height();
+			this.context = $('<canvas />').attr({
+				width: this.width,
+				height: this.height,
+				id: "sakura_bg"
+			}).appendTo(this.$container).get(0).getContext('2d');
+			this.cherries = [];
+			this.maxAddingInterval = Math.round(this.MAX_ADDING_INTERVAL * 1000 / this.width);
+			this.addingInterval = this.maxAddingInterval;
+		},
+		reconstructMethods: function () {
+			this.render = this.render.bind(this);
+		},
+		createCherries: function () {
+			for (var i = 0, length = Math.round(this.INIT_CHERRY_BLOSSOM_COUNT * this.width / 1000); i < length; i++) {
+				this.cherries.push(new CHERRY_BLOSSOM(this, true));
+				//console.log("添加第"+i+"片花瓣");
+			}
+		},
+		render: function () {
+			requestAnimationFrame(this.render);
+			this.context.clearRect(0, 0, this.width, this.height);
+
+			this.cherries.sort(function (cherry1, cherry2) {
+				return cherry1.z - cherry2.z;
+			});
+			for (var i = this.cherries.length - 1; i >= 0; i--) {
+				if (!this.cherries[i].render(this.context)) {
+					this.cherries.splice(i, 1);
+				}
+			}
+			if (--this.addingInterval == 0) {
+				this.addingInterval = this.maxAddingInterval;
+				this.cherries.push(new CHERRY_BLOSSOM(this, false));
+			}
+		}
+	};
+	var CHERRY_BLOSSOM = function (renderer, isRandom) {
+		this.renderer = renderer;
+		this.init(isRandom);
+	};
+	CHERRY_BLOSSOM.prototype = {
+		FOCUS_POSITION: 300,
+		FAR_LIMIT: 600,
+		MAX_RIPPLE_COUNT: 100,
+		RIPPLE_RADIUS: 100,
+		SURFACE_RATE: 0.5,
+		SINK_OFFSET: 20,
+
+		init: function (isRandom) {
+			this.x = this.getRandomValue(-this.renderer.width, this.renderer.width);
+			this.y = isRandom ? this.getRandomValue(0, this.renderer.height) : this.renderer.height * 1.5;
+			this.z = this.getRandomValue(0, this.FAR_LIMIT);
+			this.vx = this.getRandomValue(-2, 2);
+			this.vy = -2;
+			this.theta = this.getRandomValue(0, Math.PI * 2);
+			this.phi = this.getRandomValue(0, Math.PI * 2);
+			this.psi = 0;
+			this.dpsi = this.getRandomValue(Math.PI / 600, Math.PI / 300);
+			this.opacity = 0;
+			this.endTheta = false;
+			this.endPhi = false;
+			this.rippleCount = 0;
+
+			var axis = this.getAxis(),
+				theta = this.theta + Math.ceil(-(this.y + this.renderer.height * this.SURFACE_RATE) / this.vy) * Math.PI / 500;
+			theta %= Math.PI * 2;
+
+			this.offsetY = 40 * ((theta <= Math.PI / 2 || theta >= Math.PI * 3 / 2) ? -1 : 1);
+			this.thresholdY = this.renderer.height / 2 + this.renderer.height * this.SURFACE_RATE * axis.rate;
+			this.entityColor = this.renderer.context.createRadialGradient(0, 40, 0, 0, 40, 80);
+			this.entityColor.addColorStop(0, 'hsl(330, 70%, ' + 50 * (0.3 + axis.rate) + '%)');
+			this.entityColor.addColorStop(0.05, 'hsl(330, 40%,' + 55 * (0.3 + axis.rate) + '%)');
+			this.entityColor.addColorStop(1, 'hsl(330, 20%, ' + 70 * (0.3 + axis.rate) + '%)');
+			this.shadowColor = this.renderer.context.createRadialGradient(0, 40, 0, 0, 40, 80);
+			this.shadowColor.addColorStop(0, 'hsl(330, 40%, ' + 30 * (0.3 + axis.rate) + '%)');
+			this.shadowColor.addColorStop(0.05, 'hsl(330, 40%,' + 30 * (0.3 + axis.rate) + '%)');
+			this.shadowColor.addColorStop(1, 'hsl(330, 20%, ' + 40 * (0.3 + axis.rate) + '%)');
+		},
+		getRandomValue: function (min, max) {
+			return min + (max - min) * Math.random();
+		},
+		getAxis: function () {
+			var rate = this.FOCUS_POSITION / (this.z + this.FOCUS_POSITION),
+				x = this.renderer.width / 2 + this.x * rate,
+				y = this.renderer.height / 2 - this.y * rate;
+			return {
+				rate: rate,
+				x: x,
+				y: y
+			};
+		},
+		renderCherry: function (context, axis) {
+			context.beginPath();
+			context.moveTo(0, 40);
+			context.bezierCurveTo(-60, 20, -10, -60, 0, -20);
+			context.bezierCurveTo(10, -60, 60, 20, 0, 40);
+			context.fill();
+
+			for (var i = -4; i < 4; i++) {
+				context.beginPath();
+				context.moveTo(0, 40);
+				context.quadraticCurveTo(i * 12, 10, i * 4, -24 + Math.abs(i) * 2);
+				context.stroke();
+			}
+		},
+		render: function (context) {
+			var axis = this.getAxis();
+
+			if (axis.y == this.thresholdY && this.rippleCount < this.MAX_RIPPLE_COUNT) {
+				context.save();
+				context.lineWidth = 2;
+				context.strokeStyle = 'hsla(0, 0%, 100%, ' + (this.MAX_RIPPLE_COUNT - this.rippleCount) / this.MAX_RIPPLE_COUNT +
+					')';
+				context.translate(axis.x + this.offsetY * axis.rate * (this.theta <= Math.PI ? -1 : 1), axis.y);
+				context.scale(1, 0.3);
+				context.beginPath();
+				context.arc(0, 0, this.rippleCount / this.MAX_RIPPLE_COUNT * this.RIPPLE_RADIUS * axis.rate, 0, Math.PI * 2,
+					false);
+				context.stroke();
+				context.restore();
+				this.rippleCount++;
+			}
+			if (axis.y < this.thresholdY || (!this.endTheta || !this.endPhi)) {
+				if (this.y <= 0) {
+					this.opacity = Math.min(this.opacity + 0.01, 1);
+				}
+				context.save();
+				context.globalAlpha = this.opacity;
+				context.fillStyle = this.shadowColor;
+				context.strokeStyle = 'hsl(330, 30%,' + 40 * (0.3 + axis.rate) + '%)';
+				context.translate(axis.x, Math.max(axis.y, this.thresholdY + this.thresholdY - axis.y));
+				context.rotate(Math.PI - this.theta);
+				context.scale(axis.rate * -Math.sin(this.phi), axis.rate);
+				context.translate(0, this.offsetY);
+				this.renderCherry(context, axis);
+				context.restore();
+			}
+			context.save();
+			context.fillStyle = this.entityColor;
+			context.strokeStyle = 'hsl(330, 40%,' + 70 * (0.3 + axis.rate) + '%)';
+			context.translate(axis.x, axis.y + Math.abs(this.SINK_OFFSET * Math.sin(this.psi) * axis.rate));
+			context.rotate(this.theta);
+			context.scale(axis.rate * Math.sin(this.phi), axis.rate);
+			context.translate(0, this.offsetY);
+			this.renderCherry(context, axis);
+			context.restore();
+
+			if (this.y <= -this.renderer.height / 4) {
+				if (!this.endTheta) {
+					for (var theta = Math.PI / 2, end = Math.PI * 3 / 2; theta <= end; theta += Math.PI) {
+						if (this.theta < theta && this.theta + Math.PI / 200 > theta) {
+							this.theta = theta;
+							this.endTheta = true;
+							break;
+						}
+					}
+				}
+				if (!this.endPhi) {
+					for (var phi = Math.PI / 8, end = Math.PI * 7 / 8; phi <= end; phi += Math.PI * 3 / 4) {
+						if (this.phi < phi && this.phi + Math.PI / 200 > phi) {
+							this.phi = Math.PI / 8;
+							this.endPhi = true;
+							break;
+						}
+					}
+				}
+			}
+			if (!this.endTheta) {
+				if (axis.y == this.thresholdY) {
+					this.theta += Math.PI / 200 * ((this.theta < Math.PI / 2 || (this.theta >= Math.PI && this.theta < Math.PI * 3 /
+						2)) ? 1 : -1);
+				} else {
+					this.theta += Math.PI / 500;
+				}
+				this.theta %= Math.PI * 2;
+			}
+			if (this.endPhi) {
+				if (this.rippleCount == this.MAX_RIPPLE_COUNT) {
+					this.psi += this.dpsi;
+					this.psi %= Math.PI * 2;
+				}
+			} else {
+				this.phi += Math.PI / ((axis.y == this.thresholdY) ? 200 : 500);
+				this.phi %= Math.PI;
+			}
+			if (this.y <= -this.renderer.height * this.SURFACE_RATE) {
+				this.x += 2;
+				this.y = -this.renderer.height * this.SURFACE_RATE;
+			} else {
+				this.x += this.vx;
+				this.y += this.vy;
+			}
+			return this.z > -this.FOCUS_POSITION && this.z < this.FAR_LIMIT && this.x < this.renderer.width * 1.5;
+		}
+	};
+
+	$(function () {
+		RENDERER.init();
+	});
+</script>
+<!-- 背景透明度，左右距离 -->
+
+<div style="background-color: #ffffff; margin-left: 10%; margin-right: 10%; opacity: 60%" id="white_background">
+	<!-- 顶部导航栏的 -->
+	<div id="navigation">
+		<nav class="navbar navbar-light bg-light">
+			<a class="navbar-brand">
+				<img src="./滑稽icon.png" width="30" height="30" class="d-inline-block align-top" alt="">
+				十月叶~Leaf Oct &nbsp; &nbsp; <small>名不见经传的程序员 诗人 作曲家</small>
+			</a>
+			<ul class="nav justify-content-end">
+				<li class="nav-item">
+					<a class="nav-link" href="#">首页</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="#">博文</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="#">日记</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="https://space.bilibili.com/37626614/article">原创诗词</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="https://space.bilibili.com/37626614/audio">音乐</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="#">辑录诗词</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="#">摘录句子</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="#">料理</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="https://music.163.com/#/album?id=75453">三年幻想乡</a>
+				</li>
+			</ul>
+		</nav>
+	</div>
+
+
+	<div id="picture_and_name" style="height: auto;">
+		<img style="margin: 5px;" width="45%" src="./konan.jpg" />
+		<div style="display: inline; width: 50%; float: right; padding: 5%;">
+			<small>
+				<p>不会打架斗法,不会琴棋书画,只会洗衣做饭带娃的屑</p>
+			</small>
+			<br>
+			<h3 align="middle">十月叶 ~ Leaf Oct</h3><br>
+			<p>我的圈子: 深大东方圈. 里面有ACM的大佬锅钢,米缸, 有L3-1003信安会长夏男人, 有大文豪烟斗, 有日语协会会长苍山 (大佬云集)</p>
+			<br>
+			<p>爱好: 诗词, 钢琴, 东方, 柯南, 特摄</p>
+			<br>
+			<p>偶像: 啊???肖战、丁真???</p>
+			<br>
+			<p>工作: 程序员 业余作曲家 柯学家 名蒸蛋?</p>
+			<br>
+			<p>作品：专辑《记忆飘零》,《Along Envolops》,《2020的春夏秋冬》。软件《最近点对可视化》《五排序》《垃圾分类》。游戏《东方幽紫诗》</p>
+		</div>
+		<br>
+		<h2 align="center">友情链接</h2>
+		<div style="text-align: center;">
+			<a href="https://space.bilibili.com/37626614" target="_blank"><img
+					src="https://img.zcool.cn/community/016a8359a61d57a8012028a96b4610.jpg@1280w_1l_2o_100sh.jpg"
+					width="100px" /></a>
+			<a href="https://github.com/leaf-oct" target="_blank" style="margin-left: 8%;"><img
+					src="https://img.88icon.com/download/jpg/20200725/c6f0b8975a1101e16d302a6f81901084_512_510.jpg"
+					width="100px"></a>
+		</div>
+	</div>
+
+</div>
+
+<body>
+</body>
+
+</html>
