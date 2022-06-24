@@ -143,6 +143,10 @@ public class MainClient {
 				
 				System.exit(0);
 			}
+			if(huc.getResponseCode()!=200) {
+				System.out.println(huc.getResponseCode()+"木大木大");
+				System.exit(0);
+			}
 //			读的是文本类型的文件，用字符流保存
 			if(res.endsWith(".txt")||res.endsWith(".html")||res.endsWith(".htm")) {
 				BufferedReader br=new BufferedReader(new InputStreamReader(huc.getInputStream()));
@@ -207,7 +211,6 @@ public class MainClient {
 		JLabel l=new JLabel(i);
 		window.add(l);
 		window.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-		window.setResizable(false);
 		window.setVisible(true);
 	}
 }
